@@ -34,12 +34,7 @@ func handlerAddFeed(s *state, cmd command) error {
 		return fmt.Errorf("couldn't create feed: %w", err)
 	}
 
-	fmt.Println("Feed created successfully:")
-	printFeed(feed, user)
-	fmt.Println()
-	fmt.Println("=====================================")
-
-	_, err = s.db.CreateFeedFollow(context.Background(), database.CreateFeedFollowParams{
+	feedFollow, err := s.db.CreateFeedFollow(context.Background(), database.CreateFeedFollowParams{
 		ID:        uuid.New(),
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
@@ -47,12 +42,15 @@ func handlerAddFeed(s *state, cmd command) error {
 		FeedID:    feed.ID,
 	})
 	if err != nil {
-		return fmt.Errorf("couldn't follow feed: %w", err)
+		return fmt.Errorf("couldn't create feed follow: %w", err)
 	}
 
+	fmt.Println("Feed created successfully:")
+	printFeed(feed, user)
+	fmt.Println()
 	fmt.Println("Feed followed successfully:")
-	fmt.Printf("Feed ID: %s, User ID: %s\n", feed.ID, user.ID)
-
+	printFeedFollow(feedFollow.UserName, feedFollow.FeedName)
+	fmt.Println("=====================================")
 	return nil
 }
 
