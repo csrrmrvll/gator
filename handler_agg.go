@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/csrrmrvll/gator/internal/database"
@@ -53,32 +54,34 @@ func scrapeFeed(db *database.Queries, feed database.Feed) {
 		return
 	}
 	for _, item := range feedData.Channel.Item {
-		fmt.Printf("Found post: %s\n", item.Title)
-		_, err := db.CreatePost(context.Background(), database.CreatePostParams{
-			ID:          uuid.New(),
-			CreatedAt:   time.Now(),
-			UpdatedAt:   time.Now(),
-			FeedID:      feed.ID,
-			Title:       item.Title,
-			Description: item.Description,
+		publishedAt := sql.NullTime{}
+		if t, err := time.Parse(time.RFC1123Z, item.PubDate); err == nil {
+			publishedAt = sql.NullTime{
+				Time:  t,
+				Valid: true,
+			}
+		}
+
+		_, err = db.CreatePost(context.Background(), database.CreatePostParams{
+			ID:        uuid.New(),
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
+			FeedID:    feed.ID,
+			Title:     item.Title,
+			Description: sql.NullString{
+				String: item.Description,
+				Valid:  true,
+			},
 			Url:         item.Link,
-			PublishedAt: parsePubDate(item.PubDate),
+			PublishedAt: publishedAt,
 		})
 		if err != nil {
-			log.Printf("Couldn't create post %s: %v", item.Title, err)
+			if strings.Contains(err.Error(), "duplicate key value violates unique constraint") {
+				continue
+			}
+			log.Printf("Couldn't create post: %v", err)
+			continue
 		}
 	}
 	log.Printf("Feed %s collected, %v posts found", feed.Name, len(feedData.Channel.Item))
-}
-
-func parsePubDate(pubDate string) sql.NullTime {
-	t, err := time.Parse(time.RFC1123Z, pubDate)
-	if err != nil {
-		t, err = time.Parse(time.RFC1123, pubDate)
-		if err != nil {
-			log.Printf("Couldn't parse pubDate %s: %v", pubDate, err)
-			return sql.NullTime{Valid: false}
-		}
-	}
-	return sql.NullTime{Time: t, Valid: true}
 }

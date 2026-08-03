@@ -3,38 +3,37 @@ package main
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/csrrmrvll/gator/internal/database"
 )
 
 func handlerBrowse(s *state, cmd command, user database.User) error {
-	var limit int32 = 2
-	if len(cmd.Args) < 1 {
-		fmt.Println("No limit provided, defaulting to 2")
-	} else {
-		fmt.Sscanf(cmd.Args[0], "%d", &limit)
+	limit := 2
+	if len(cmd.Args) == 1 {
+		if specifiedLimit, err := strconv.Atoi(cmd.Args[0]); err == nil {
+			limit = specifiedLimit
+		} else {
+			return fmt.Errorf("invalid limit: %w", err)
+		}
 	}
 
 	posts, err := s.db.GetPostsForUser(context.Background(), database.GetPostsForUserParams{
 		UserID: user.ID,
-		Limit:  limit,
-		Offset: 0,
+		Limit:  int32(limit),
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("couldn't get posts for user: %w", err)
 	}
 
+	fmt.Printf("Found %d posts for user %s:\n", len(posts), user.Name)
 	for _, post := range posts {
-		printPost(post)
+		fmt.Printf("%s from %s\n", post.PublishedAt.Time.Format("Mon Jan 2"), post.FeedName)
+		fmt.Printf("--- %s ---\n", post.Title)
+		fmt.Printf("    %v\n", post.Description.String)
+		fmt.Printf("Link: %s\n", post.Url)
+		fmt.Println("=====================================")
 	}
 
 	return nil
-}
-
-func printPost(post database.Post) {
-	fmt.Printf("Title: %s\n", post.Title)
-	fmt.Printf("URL: %s\n", post.Url)
-	fmt.Printf("Description: %s\n", post.Description)
-	fmt.Printf("Published At: %s\n", post.PublishedAt)
-	fmt.Println("-------------------------")
 }

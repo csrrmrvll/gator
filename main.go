@@ -8,6 +8,7 @@ import (
 
 	"github.com/csrrmrvll/gator/internal/config"
 	"github.com/csrrmrvll/gator/internal/database"
+
 	_ "github.com/lib/pq"
 )
 
@@ -37,6 +38,7 @@ func main() {
 	cmds := commands{
 		registeredCommands: make(map[string]func(*state, command) error),
 	}
+
 	cmds.register("register", handlerRegister)
 	cmds.register("login", handlerLogin)
 	cmds.register("reset", handlerReset)

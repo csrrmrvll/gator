@@ -14,7 +14,7 @@ import (
 )
 
 const createPost = `-- name: CreatePost :one
-INSERT INTO posts (id, created_at, updated_at, feed_id, title, url, description, published_at)
+INSERT INTO posts (id, created_at, updated_at, title, url, description, published_at, feed_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING id, created_at, updated_at, title, url, description, published_at, feed_id
 `
@@ -23,11 +23,11 @@ type CreatePostParams struct {
 	ID          uuid.UUID
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
-	FeedID      uuid.UUID
 	Title       string
 	Url         string
-	Description string
+	Description sql.NullString
 	PublishedAt sql.NullTime
+	FeedID      uuid.UUID
 }
 
 func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) (Post, error) {
@@ -35,11 +35,11 @@ func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) (Post, e
 		arg.ID,
 		arg.CreatedAt,
 		arg.UpdatedAt,
-		arg.FeedID,
 		arg.Title,
 		arg.Url,
 		arg.Description,
 		arg.PublishedAt,
+		arg.FeedID,
 	)
 	var i Post
 	err := row.Scan(
@@ -56,29 +56,41 @@ func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) (Post, e
 }
 
 const getPostsForUser = `-- name: GetPostsForUser :many
-SELECT p.id, p.created_at, p.updated_at, p.title, p.url, p.description, p.published_at, p.feed_id
-FROM posts p
-JOIN feeds f ON p.feed_id = f.id
-WHERE f.user_id = $1
-ORDER BY p.published_at DESC
-LIMIT $2 OFFSET $3
+
+SELECT posts.id, posts.created_at, posts.updated_at, posts.title, posts.url, posts.description, posts.published_at, posts.feed_id, feeds.name AS feed_name FROM posts
+JOIN feed_follows ON feed_follows.feed_id = posts.feed_id
+JOIN feeds ON posts.feed_id = feeds.id
+WHERE feed_follows.user_id = $1
+ORDER BY posts.published_at DESC
+LIMIT $2
 `
 
 type GetPostsForUserParams struct {
 	UserID uuid.UUID
 	Limit  int32
-	Offset int32
 }
 
-func (q *Queries) GetPostsForUser(ctx context.Context, arg GetPostsForUserParams) ([]Post, error) {
-	rows, err := q.db.QueryContext(ctx, getPostsForUser, arg.UserID, arg.Limit, arg.Offset)
+type GetPostsForUserRow struct {
+	ID          uuid.UUID
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	Title       string
+	Url         string
+	Description sql.NullString
+	PublishedAt sql.NullTime
+	FeedID      uuid.UUID
+	FeedName    string
+}
+
+func (q *Queries) GetPostsForUser(ctx context.Context, arg GetPostsForUserParams) ([]GetPostsForUserRow, error) {
+	rows, err := q.db.QueryContext(ctx, getPostsForUser, arg.UserID, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Post
+	var items []GetPostsForUserRow
 	for rows.Next() {
-		var i Post
+		var i GetPostsForUserRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.CreatedAt,
@@ -88,6 +100,7 @@ func (q *Queries) GetPostsForUser(ctx context.Context, arg GetPostsForUserParams
 			&i.Description,
 			&i.PublishedAt,
 			&i.FeedID,
+			&i.FeedName,
 		); err != nil {
 			return nil, err
 		}
